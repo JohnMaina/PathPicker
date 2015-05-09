@@ -14,8 +14,6 @@ import logger
 
 OUTPUT_FILE = '~/.fbPager.sh'
 SELECTION_PICKLE = '~/.fbPager.selection.pickle'
-BASH_RC = '~/.bashrc'
-ZSH_RC = '~/.zshrc'
 DEBUG = '~/.fbPager.debug.text'
 RED_COLOR = u'\033[0;31m'
 NO_COLOR = u'\033[0m'
@@ -33,8 +31,12 @@ versions which cannot be resolved.
 
 CONTINUE_WARNING = 'Are you sure you want to continue? Ctrl-C to quit'
 
-ALIAS_REGEX = re.compile('alias (\w+)=[\'"](.*?)[\'"]')
-
+FILES_TO_SOURCE = [
+    '~/.zshrc',
+    '~/.bashrc',
+    '~/.bash_profile',
+    '~/.bash_aliases'
+]
 
 # The two main entry points into this module:
 #
@@ -45,7 +47,7 @@ def execComposedCommand(command, lineObjs):
         return
     logger.addEvent('command_on_num_files', len(lineObjs))
     command = composeCommand(command, lineObjs)
-    command = expandAliases(command)
+    appendAliasExpansion()
     appendIfInvalid(lineObjs)
     appendFriendlyCommand(command)
 
@@ -104,33 +106,6 @@ def getEditFileCommand(filePath, lineNum):
         return "'%s'" % filePath
 
 
-def getAliases():
-    try:
-        lines = open(os.path.expanduser(BASH_RC), 'r').readlines()
-    except IOError:
-        # fallback to zsh_rc and try there
-        try:
-            lines = open(os.path.expanduser(ZSH_RC), 'r').readlines()
-        except IOError:
-            return {}
-    pairs = []
-    for line in lines:
-        results = ALIAS_REGEX.search(line)
-        if results:
-            # groups is a tuple of (word, expanded)
-            pairs.append(results.groups())
-    # ok now we can make a dict out of this
-    return dict(pairs)
-
-
-def expandAliases(command):
-    aliasToExpand = getAliases()
-    tokens = command.split(' ')
-    if (tokens[0] in aliasToExpand):
-        tokens[0] = aliasToExpand[tokens[0]]
-    return ' '.join(tokens)
-
-
 def expandPath(filePath):
     # expand ~/ paths
     filePath = os.path.expanduser(filePath)
@@ -187,6 +162,13 @@ def outputNothing():
 def clearFile():
     writeToFile('')
 
+
+def appendAliasExpansion():
+    appendToFile('shopt -s expand_aliases')
+    for sourceFile in FILES_TO_SOURCE:
+      appendToFile('if [ -f %s ]; then' % sourceFile)
+      appendToFile('  source %s' % sourceFile)
+      appendToFile('fi')
 
 def appendFriendlyCommand(command):
     header = 'echo "executing command:"\n' + \
